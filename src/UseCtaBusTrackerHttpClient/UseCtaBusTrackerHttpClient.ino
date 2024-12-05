@@ -2,13 +2,9 @@
 #include <ESP8266HTTPClient.h>
 #include <stdio.h>
 
-#define BASE_API_URL "http://www.ctabustracker.com/bustime/api"
-#define V2_GET_PREDICTIONS "/v2/getpredictions"
-#define CTA_BUS_TRACKER_API_KEY "some-api-key"
-
-#ifndef STASSID
-#define STASSID "some-ssid"
-#define STAPSK "some-pwd"
+#ifndef PRODUCTION_BUILD
+#include "wifi-config.h"
+#include "cta-config.h"
 #endif
 
 int PUSH_BUTTON = 0;
@@ -25,7 +21,6 @@ void setup() {
 void loop() {
   if ((WiFi.status() == WL_CONNECTED)) {      
     int buttonState = digitalRead(PUSH_BUTTON);
-    Serial.println(buttonState);
 
     if(buttonState == LOW) {
       digitalWrite(LED_BUILTIN, HIGH);
@@ -65,13 +60,13 @@ void setupWiFi() {
 void getPredictions() {
     WiFiClient client;
     HTTPClient http;
-    char * northCampbellWest = "950";
-    char * northCampbellEast = "893";
-    char * westernLeMoyneSouth = "17343";
-    char * westernLeMoyneNorth = "8394";
+    String northCampbellWest = "950";
+    String northCampbellEast = "893";
+    String westernLeMoyneSouth = "17343";
+    String westernLeMoyneNorth = "8394";
 
-    char * query = "?key=" CTA_BUS_TRACKER_API_KEY "&format=json&stpid=" "17343"+","+"8394"+","+"893"+","+"950";
-    char * url = BASE_API_URL V2_GET_PREDICTIONS + query ;
+    String query = "?key=" CTA_BUS_TRACKER_API_KEY "&format=json&stpid=" "17343" "," "8394" "," "893" "," "950";
+    String url = BASE_API_URL V2_GET_PREDICTIONS + query ;
     Serial.print("[HTTP] begin getting predictions: " +url+ "\n");
 
     http.begin(client, url);
@@ -86,8 +81,8 @@ void getPredictions() {
         Serial.println("received payload:\n<<");
         Serial.println(payload);
         Serial.println(">>");
-        //char *message = "Hello Chicago!";
-        writeOnScreen(payload);
+        char *message = "Hello Chicago!";
+        writeOnScreen(message);
       }
     } else {
       Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
@@ -98,6 +93,6 @@ void getPredictions() {
 }
 
 void writeOnScreen(const char *text) {
-      Serial.printf(message);
+      Serial.printf(text);
 }
 
