@@ -1,9 +1,26 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <stdio.h>
-// #include <Arduino_JSON.h>
+
+// related to monocromatic OLED
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SH110X.h>
 
 #include <ArduinoJson.h>
+
+// related to monocromatic OLED
+/* Uncomment the initialize the I2C address , uncomment only one, If you get a totally blank screen try the other*/
+#define i2c_Address 0x3c // initialize with the I2C addr 0x3C Typically eBay OLED's
+// #define i2c_Address 0x3d //initialize with the I2C addr 0x3D Typically Adafruit OLED's
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define OLED_RESET -1    //   QT-PY / XIAO
+#define MAX_CHARS 19     // number of max characters to show on the 096 OLED
+
+Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // related to wifi
 #ifndef PRODUCTION_BUILD
@@ -18,6 +35,16 @@
 #define WESTERN_LEMOYNE_NORTH "8394"
 
 int PUSH_BUTTON = 0;
+
+// definitions
+typedef struct
+{
+  char stopName[50];
+  char route[10];
+  char direction[20];
+  char predictedTime[20];
+  int predictedMin;
+} BusPrediction;
 
 void setup()
 {
@@ -53,6 +80,12 @@ void loop()
 
 void setupDisplay()
 {
+  delay(250);                       // wait for the OLED to power up
+  display.begin(i2c_Address, true); // Address 0x3C default
+                                    // display.setContrast (0); // dim display
+
+  display.display();
+  delay(1000);
 }
 
 void setupSerial()
@@ -91,7 +124,7 @@ void getPredictions()
     Serial.println(stopIds[i]);
   }
 
-  String stpidParam = buildStpidParam(stopIds, stopIdsSize);
+  String stpidParam = buildStpidParamsForApi(stopIds, stopIdsSize);
 
   String query = "?key=" CTA_BUS_TRACKER_API_KEY "&format=json&stpid=" + stpidParam;
   String url = BASE_API_URL V2_GET_PREDICTIONS + query;
@@ -134,6 +167,8 @@ void getPredictions()
     Serial.println(prd);
 
     // Iterate through the predictions
+    BusPrediction busPredictions[prd.size()];
+
     int i = 0;
     for (JsonVariant prediction : prd)
     {
@@ -145,8 +180,20 @@ void getPredictions()
       String rtdir = prediction["rtdir"];
       int prdctdn = prediction["prdctdn"];
 
+      BusPrediction p;
+      strcpy(p.stopName, stpnm.c_str());
+      strcpy(p.route, rt.c_str());
+      strcpy(p.direction, rtdir.c_str());
+      strcpy(p.predictedTime, prdtm.c_str());
+      p.predictedMin = prdctdn;
+
+      busPredictions[i] = p;
+
       Serial.print(i);
-      if(i<10) {Serial.print(" ");}
+      if (i < 10)
+      {
+        Serial.print(" ");
+      }
       // Use the extracted information
       Serial.print(" Stop Name: ");
       Serial.println(stpnm);
@@ -160,6 +207,10 @@ void getPredictions()
       Serial.println(prdtm);
       Serial.println();
     }
+
+    // todo: do something with busPredictions
+    int array_size = sizeof(busPredictions) / sizeof(busPredictions[0]);
+    doSomethingWithIt(busPredictions, array_size);
   }
   else
   {
@@ -167,13 +218,13 @@ void getPredictions()
     // todo-mari: turn the error light on, output Error message.
   }
 
+  http.end();
+
   const char *message = "Hola mi amor!";
   writeOnScreen(message);
-
-  http.end();
 }
 
-String buildStpidParam(const String *stopIds, int numStopIds)
+String buildStpidParamsForApi(const String *stopIds, int numStopIds)
 {
   String stpidParam = "";
 
@@ -196,4 +247,63 @@ String buildStpidParam(const String *stopIds, int numStopIds)
 void writeOnScreen(const char *text)
 {
   Serial.println(text);
+}
+
+String truncatetext(String stpnm, int maxChars)
+{
+  char stpnm_shorten[maxChars];                        // 9 characters + 1 for null terminator
+  strncpy(stpnm_shorten, stpnm.c_str(), maxChars - 1); // convert stop name from string to char *
+  stpnm_shorten[maxChars - 1] = '\0';                  // Ensure null-termination
+
+  return stpnm_shorten;
+}
+
+void doSomethingWithIt(BusPrediction predictions[], int predictionsLength)
+{
+
+  display.clearDisplay();
+  display.setTextSize(1);             // Normal 1:1 pixel scale
+  display.setTextColor(SH110X_WHITE); // Draw white text
+  display.setCursor(0, 0);            // Start at top-left corner
+  display.println(F("---CTA BUS---"));
+  display.println("Trying to invoke method: Do something with it");
+  display.display();
+  Serial.println("Trying to invoke method: Do something with it");
+  for (int i = 0; i < predictionsLength; i++)
+  {
+    BusPrediction p = predictions[i];
+    int position = i + 1; // i++;
+
+    Serial.println(p.stopName);
+
+    display.clearDisplay();
+    display.setTextSize(1);             // Normal 1:1 pixel scale
+    display.setTextColor(SH110X_WHITE); // Draw white text
+    display.setCursor(0, 0);            // Start at top-left corner
+    display.println(F("---CTA BUS---"));
+    String stpnm_shorten = truncatetext(p.stopName, MAX_CHARS);
+    display.print(position);
+    if (position < 10)
+    {
+      display.print(" ");
+    }
+    display.print(" ");
+    display.println(stpnm_shorten); // stop name, ie: North & Campbell
+    display.print("   ");
+    display.print(p.route); // route, ie: 49
+    display.print(" ");
+    display.println(p.direction); // direction, ie: South
+    display.print("   ");
+    display.print(p.predictedMin);
+    display.println("min");
+    display.display();
+    delay(3000); // wait 3 s before showing the next result
+    display.clearDisplay();
+  }
+
+  display.setCursor(0, 0); // Start at top-left corner
+  display.println("doSomethingWithIt executed!");
+  display.display();
+  delay(1000);
+  display.clearDisplay();
 }
